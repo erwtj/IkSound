@@ -12,6 +12,7 @@ const track = ref();
 function fetchTrack(trackId) {
   api.get(`json/track/${trackId}`).then((response) => {
     track.value = response.data;
+    console.log(response.data)
   }).catch((error) => {
     console.error("Error fetching track:", error);
   });
@@ -20,8 +21,14 @@ function fetchTrack(trackId) {
 const url = computed(() => {
   return track.value.isSfx ?
       `https://www.epidemicsound.com/sound-effects/tracks/${track.value.kosmosId}` :
-      `https://www.epidemicsound.com/track/${track.value.publicSlug}`;
+      `https://www.epidemicsound.com/music/tracks/${track.value.kosmosId}`;
 })
+
+function copyToClipboard() {
+  window.navigator.clipboard.writeText(window.location).catch((err) => {
+    console.error("Could not copy text: ", err);
+  });
+}
 
 onMounted(() => {
   const trackId = route.params.id;
@@ -37,7 +44,13 @@ onMounted(() => {
         <h1 class="text-3xl">{{ track.title }}</h1>
         <p v-if="track.creatives.mainArtists.length > 0"><span class="text-secondary">By </span> {{ track.creatives.mainArtists.map((arist) => arist.name).join(', ') }}</p>
         
-        <h2 class="text-xl">Coming soon...</h2>
+        <p class="text-secondary">
+          <span v-for="genre in track.genres" :key="genre.slug">
+            <RouterLink class="clickable-link" :to="`/search?genre=${genre.slug}&sfx=${track.isSfx}`">
+              {{ genre.displayTag }}
+            </RouterLink>{{ track.genres[track.genres.length - 1].slug !== genre.slug ? ', ' : '' }}
+          </span>
+        </p>
       </div>
 
       <div class="h-full ms-auto flex flex-row">
@@ -54,7 +67,7 @@ onMounted(() => {
                     d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/>
             </svg>
           </a>
-          <button class="h-1/3 empty-btn" type="button">
+          <button class="h-1/3 empty-btn" type="button" @click.prevent="copyToClipboard">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
               <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
             </svg>
