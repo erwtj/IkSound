@@ -7,12 +7,17 @@ import {download} from "../utils.js";
 
 const route = useRoute();
 
+let animationFrameId;
+
+const playing = ref(false);
+const progress = ref(null);
+
 const track = ref();
+const audio = ref();
 
 function fetchTrack(trackId) {
   api.get(`json/track/${trackId}`).then((response) => {
     track.value = response.data;
-    console.log(response.data)
   }).catch((error) => {
     console.error("Error fetching track:", error);
   });
@@ -30,7 +35,52 @@ function copyToClipboard() {
   });
 }
 
+function play() {
+  if (playing.value) {
+    audio.value.pause();
+  } else {
+    audio.value.play();
+  }
+
+  playing.value = !playing.value;
+  updateProgress();
+}
+
+function handleWaveformClick(e) {
+  const at = e.offsetX / e.target.offsetWidth;
+  progress.value = at;
+
+  audio.value.currentTime = at * track.value.durationMs / 1000;
+
+  audio.value.play();
+  playing.value = true;
+
+  updateProgress();
+}
+
+function updateProgress() {
+  if (!audio.value || audio.value.paused) return;
+
+
+  if (!isNaN(audio.value.duration))
+    progress.value = audio.value.currentTime / audio.value.duration || 0;
+
+  animationFrameId = requestAnimationFrame(updateProgress);
+}
+
+function stopProgress() {
+  cancelAnimationFrame(animationFrameId);
+}
+
+function onEnded() {
+  playing.value = false;
+  stopProgress();
+}
+
 onMounted(() => {
+  playing.value = false;
+  progress.value = null;
+
   const trackId = route.params.id;
   fetchTrack(trackId);
 });
@@ -39,18 +89,27 @@ onMounted(() => {
 <template>
   <div v-if="track" class="fade-in flex flex-col gap-4">
     <div class="h-64 w-full bg-gradient flex flex-row p-6 gap-4">
-      <div class="flex flex-col gap-2 mx-4 mt-4 p-2">
+      <div class="flex flex-col gap-1 ml-4">
         <h4 class="text-xl text-secondary">{{track.isSfx ? "Sound Effect" : "Track"}}</h4>
         <h1 class="text-3xl">{{ track.title }}</h1>
         <p v-if="track.creatives.mainArtists.length > 0"><span class="text-secondary">By </span> {{ track.creatives.mainArtists.map((arist) => arist.name).join(', ') }}</p>
-        
-        <p class="text-secondary">
-          <span v-for="genre in track.genres" :key="genre.slug">
-            <RouterLink class="clickable-link" :to="`/search?genre=${genre.slug}&sfx=${track.isSfx}`">
-              {{ genre.displayTag }}
-            </RouterLink>{{ track.genres[track.genres.length - 1].slug !== genre.slug ? ', ' : '' }}
-          </span>
-        </p>
+
+        <div class="mt-auto">
+          <p class="text-secondary">
+            <span v-for="genre in track.genres" :key="genre.slug">
+              <RouterLink class="clickable-link" :to="`/search?genre=${genre.slug}&sfx=${track.isSfx}`">
+                {{ genre.displayTag }}
+              </RouterLink>{{ track.genres[track.genres.length - 1].slug !== genre.slug ? ', ' : '' }}
+            </span>
+          </p>
+          <p class="text-secondary" v-if="track.moods.length > 0">
+            <span v-for="mood in track.moods" :key="mood.slug">
+              <RouterLink class="clickable-link" :to="`/search?mood=${mood.slug}&sfx=${track.isSfx}`">
+                {{ mood.displayTag }}
+              </RouterLink>{{ track.moods[track.moods.length - 1].slug !== mood.slug ? ', ' : '' }}
+            </span>
+          </p>
+        </div>
       </div>
 
       <div class="h-full ms-auto flex flex-row">
@@ -78,42 +137,33 @@ onMounted(() => {
       </div>
     </div>
     
-    <div class="h-14 w-full bg-gradient">
-      <div class="content-center relative cursor-pointer flex-grow hidden min-[900px]:flex" @click="handleWaveformClick">
-<!--        <span v-if="playProgress !== null" class="h-full absolute z-10 w-px bg-white top-0 left-0 smooth-move" :style="`left: ${playProgress * 100}%;`"></span>-->
+    <div class="h-14 flex flex-row w-full bg-gradient">
+      <div class="inline size-14 cursor-pointer">
+        <div class="audio-control" @click="play">
+          <svg v-if="!playing" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+               stroke="currentColor" class="size-6">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"/>
+          </svg>
+          <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+               stroke="currentColor" class="size-6">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="h-full content-center relative cursor-pointer flex-grow flex" @click="handleWaveformClick">
+        <span v-if="progress !== null" class="h-full absolute z-10 w-px bg-white top-0 left-0 smooth-move" :style="`left: ${progress * 100}%;`"></span>
         <Waveform :waveform-url="track.stems.full.waveformUrl"/>
       </div>
     </div>
   </div>
+
+  <audio :src="track?.stems?.full?.lqMp3Url" ref="audio" :onended="onEnded"/>
 </template>
 
 <style scoped>
-@property --gradient-end {
-  syntax: '<color>';
-  initial-value: #212529;
-  inherits: false;
-}
-
-.empty-btn {
-  border: none;
-  background: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-  outline: inherit;
-  align-content: center;
-  text-align-last: center;
-  place-items: center;
-  aspect-ratio: 1;
-  
-  padding: 0.75rem;
-}
-
 .empty-btn:hover {
-  background-color: #181b1e;
-}
-
-.empty-btn:active, .wide-btn:active {
-  background-color: #3b3b3b;
+  background: #181b1e;
 }
 </style>
