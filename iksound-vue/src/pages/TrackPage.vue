@@ -152,9 +152,17 @@ onMounted(() => {
         </div>
       </div>
 
+      <div class="inline size-14 text-center text-secondary content-center">
+        {{ Math.floor(progress * track.length / 60) }}:{{ Math.floor(progress * track.length % 60) < 10 ? '0' : '' }}{{ Math.floor(progress * track.length % 60) }}
+      </div>
+
       <div class="h-full content-center relative cursor-pointer flex-grow flex" @click="handleWaveformClick">
         <span v-if="progress !== null" class="h-full absolute z-10 w-px bg-white top-0 left-0 smooth-move" :style="`left: ${progress * 100}%;`"></span>
         <Waveform :waveform-url="track.stems.full.waveformUrl"/>
+      </div>
+
+      <div class="inline size-14 text-center text-secondary me-8 content-center">
+        {{ Math.floor(track.length / 60) }}:{{track.length % 60 < 10 ? '0' : '' }}{{ track.length % 60 }}
       </div>
     </div>
   </div>
