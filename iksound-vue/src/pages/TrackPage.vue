@@ -4,16 +4,12 @@ import {computed, onMounted, ref} from "vue";
 import {api} from "../api.js";
 import Waveform from "../components/Waveform.vue";
 import {download} from "../utils.js";
+import AudioPlayer from "../components/AudioPlayer.vue";
 
 const route = useRoute();
 
-let animationFrameId;
-
-const playing = ref(false);
-const progress = ref(null);
-
 const track = ref();
-const audio = ref();
+const audioPlayer = ref();
 
 function fetchTrack(trackId) {
   api.get(`json/track/${trackId}`).then((response) => {
@@ -35,52 +31,7 @@ function copyToClipboard() {
   });
 }
 
-function play() {
-  if (playing.value) {
-    audio.value.pause();
-  } else {
-    audio.value.play();
-  }
-
-  playing.value = !playing.value;
-  updateProgress();
-}
-
-function handleWaveformClick(e) {
-  const at = e.offsetX / e.target.offsetWidth;
-  progress.value = at;
-
-  audio.value.currentTime = at * track.value.durationMs / 1000;
-
-  audio.value.play();
-  playing.value = true;
-
-  updateProgress();
-}
-
-function updateProgress() {
-  if (!audio.value || audio.value.paused) return;
-
-
-  if (!isNaN(audio.value.duration))
-    progress.value = audio.value.currentTime / audio.value.duration || 0;
-
-  animationFrameId = requestAnimationFrame(updateProgress);
-}
-
-function stopProgress() {
-  cancelAnimationFrame(animationFrameId);
-}
-
-function onEnded() {
-  playing.value = false;
-  stopProgress();
-}
-
 onMounted(() => {
-  playing.value = false;
-  progress.value = null;
-
   const trackId = route.params.id;
   fetchTrack(trackId);
 });
@@ -88,7 +39,7 @@ onMounted(() => {
 
 <template>
   <div v-if="track" class="fade-in flex flex-col gap-4">
-    <div class="h-64 w-full bg-gradient flex flex-row p-6 gap-4">
+    <div class="h-64 w-full bg-dark flex flex-row p-6 gap-4">
       <div class="flex flex-col gap-1 ml-4">
         <h4 class="text-xl text-secondary">{{track.isSfx ? "Sound Effect" : "Track"}}</h4>
         <h1 class="text-3xl">{{ track.title }}</h1>
@@ -133,14 +84,14 @@ onMounted(() => {
           </button>
         </div>
         
-        <img :src="track.coverArt.baseUrl + track.coverArt.sizes.L" alt="Cover Art" class="h-full ms-auto"/>
+        <img :src="track.coverArt.baseUrl + track.coverArt.sizes.L" alt="Cover Art" class="aspect-square h-full"/>
       </div>
     </div>
     
-    <div class="h-14 flex flex-row w-full bg-gradient">
+    <div class="h-14 flex flex-row w-full bg-dark">
       <div class="inline size-14 cursor-pointer">
-        <div class="audio-control" @click="play">
-          <svg v-if="!playing" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+        <div class="audio-control" @click="audioPlayer.togglePlay">
+          <svg v-if="!audioPlayer.playing" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                stroke="currentColor" class="size-6">
             <path stroke-linecap="round" stroke-linejoin="round"
                   d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"/>
@@ -153,11 +104,11 @@ onMounted(() => {
       </div>
 
       <div class="inline size-14 text-center text-secondary content-center">
-        {{ Math.floor(progress * track.length / 60) }}:{{ Math.floor(progress * track.length % 60) < 10 ? '0' : '' }}{{ Math.floor(progress * track.length % 60) }}
+        {{ Math.floor(audioPlayer.progress * track.length / 60) }}:{{ Math.floor(audioPlayer.progress * track.length % 60) < 10 ? '0' : '' }}{{ Math.floor(audioPlayer.progress * track.length % 60) }}
       </div>
 
-      <div class="h-full content-center relative cursor-pointer flex-grow flex" @click="handleWaveformClick">
-        <span v-if="progress !== null" class="h-full absolute z-10 w-px bg-white top-0 left-0 smooth-move" :style="`left: ${progress * 100}%;`"></span>
+      <div class="h-full content-center relative cursor-pointer flex-grow flex" @click="audioPlayer.handleWaveformClick">
+        <span v-if="audioPlayer.progress !== null" class="h-full absolute z-10 w-px bg-white top-0 left-0 smooth-move" :style="`left: ${audioPlayer.progress * 100}%;`"></span>
         <Waveform :waveform-url="track.stems.full.waveformUrl"/>
       </div>
 
@@ -167,7 +118,7 @@ onMounted(() => {
     </div>
   </div>
 
-  <audio :src="track?.stems?.full?.lqMp3Url" ref="audio" :onended="onEnded"/>
+  <AudioPlayer :src="track?.stems?.full?.lqMp3Url" ref="audioPlayer"/>
 </template>
 
 <style scoped>

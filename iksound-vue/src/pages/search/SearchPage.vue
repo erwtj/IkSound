@@ -1,25 +1,22 @@
 ﻿<script setup>
 
-import {computed, onBeforeUnmount, onMounted, ref} from "vue";
+import {computed, nextTick, onBeforeUnmount, onMounted, ref} from "vue";
 import {api} from "../../api.js";
 import {useRoute} from "vue-router";
 import TrackComponent from "../../components/TrackListItem.vue";
+import AudioPlayer from "../../components/AudioPlayer.vue";
 
 const route = useRoute();
 
 const tracks = ref([]);
-const playingTrack = ref(null);
-const audio = ref();
-const playing = ref(false);
-const progress = ref(0);
+const selectedTrack = ref(null);
+const audioPlayer = ref();
 const page = ref(1);
 const loading = ref(false);
 const totalPages = ref(-1);
 const totalHits = ref(-1);
 const headGenre = ref('');
 const subGenre = ref('');
-
-let animationFrameId;
 
 const loadTracks = async (page) => {
   loading.value = true;
@@ -58,63 +55,31 @@ const loadTracks = async (page) => {
 }
 
 const playTrack = (track) => {
-  playingTrack.value = track;
-  
-  if (audio.value) {
-    if (audio.value.src === track.stems.full.lqMp3Url) {
-      audio.value.play();
-      playing.value = true;
-    } else {
-      audio.value.src = track.stems.full.lqMp3Url;
+  if (!audioPlayer.value) return;
 
-      audio.value.currentTime = 0;
-      progress.value = 0;
-      audio.value.play();
-      playing.value = true;
-    }
-    
-    updateProgress();
+  if (selectedTrack.value?.id === track.id) {
+    audioPlayer.value.togglePlay();
+    return;
   }
+
+  selectedTrack.value = track;
 }
 
-const playAt = (track, at) => {
-  if (audio.value) {
-    progress.value = at;
-    audio.value.src = track.stems.full.lqMp3Url;
-    audio.value.play();
+const seekTrack = async (track, event) => {
+  if (!audioPlayer.value) return;
 
-    audio.value.currentTime = at * track.durationMs / 1000;
-    playing.value = true;
-    playingTrack.value = track;
-    updateProgress();
+  if (selectedTrack.value?.id !== track.id) {
+    selectedTrack.value = track;
+    await nextTick();
   }
+
+  audioPlayer.value.handleWaveformClick(event);
 }
 
-const pauseTrack = () => {
-  if (audio.value) {
-    audio.value.pause();
-    playing.value = false;
-    stopProgress();
-  }
-}
+const isTrackPlaying = (track) => {
+  if (!audioPlayer.value) return false;
 
-const updateProgress = () => {
-  if (!audio.value || audio.value.paused) return;
-
-  
-  if (!isNaN(audio.value.duration))
-    progress.value = audio.value.currentTime / audio.value.duration || 0;
-  
-  animationFrameId = requestAnimationFrame(updateProgress);
-};
-
-const stopProgress = () => {
-  cancelAnimationFrame(animationFrameId);
-};
-
-const onEnded = () => {
-  playing.value = false;
-  stopProgress();
+  return selectedTrack.value?.id === track.id && audioPlayer.value.playing;
 }
 
 const handleScroll = (e) => {
@@ -122,7 +87,7 @@ const handleScroll = (e) => {
   const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight;
   const clientHeight = document.documentElement.clientHeight || document.body.clientHeight;
   const dist = scrollHeight - (scrollPosition + clientHeight)
-  
+
   if(dist <= 0) {
     loadMore();
   }
@@ -142,26 +107,16 @@ const isSfx = computed(() => {
 
 onMounted(() => {
   loadTracks(page.value);
-
-  audio.value.addEventListener('play', updateProgress);
-  audio.value.addEventListener('pause', stopProgress);
-  audio.value.addEventListener('ended', onEnded);
-  
   document.onscroll = handleScroll;
 });
 
 onBeforeUnmount(() => {
-  stopProgress();
-  audio.value.removeEventListener('play', updateProgress);
-  audio.value.removeEventListener('pause', stopProgress);
-  audio.value.removeEventListener('ended', onEnded);
-  
   document.onscroll = null;
 });
 </script>
 
 <template>
-<audio ref="audio"/>
+<AudioPlayer ref="audioPlayer" :audioUrl="selectedTrack?.stems?.full?.lqMp3Url"/>
 <div class="2xl:px-16">
 
   <h1 v-if="route.query.genre && headGenre" class="fade-in text-secondary !text-lg my-2">
@@ -188,7 +143,14 @@ onBeforeUnmount(() => {
   
   <ul class="flex flex-col gap-2">
     <li v-for="track in tracks" :key="track.id">
-      <TrackComponent :track="track" @play="playTrack(track)" @pause="pauseTrack" @play-at="(at) => playAt(track, at)" :play-progress="playingTrack === track ? progress : null" :playing="playingTrack === track && playing"/>
+      <TrackComponent
+          :track="track"
+          :playing="isTrackPlaying(track)"
+          :progress="selectedTrack?.id === track.id ? audioPlayer?.progress : null"
+          :isSelectedTrack="selectedTrack?.id === track.id"
+          :handleWaveformClick="(event) => seekTrack(track, event)"
+          @togglePlay="playTrack(track)"
+      />
     </li>
   </ul>
   

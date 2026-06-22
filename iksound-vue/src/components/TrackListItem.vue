@@ -1,15 +1,15 @@
 ﻿<script setup>
-import {computed, watch} from "vue";
-import AudioPlayer from "./AudioPlayer.vue";
+import {computed} from "vue";
 import Waveform from "./Waveform.vue";
-import corsProxy from "../corsSetting.js";
-import router from "../router.js";
 import {download} from "../utils.js";
 
 const props = defineProps(
     {
-      playProgress: Number | null,
+      handleWaveformClick: Function,
+      isSelectedTrack: Boolean,
+      progress: Number,
       playing: Boolean,
+
       track: {
         id: Number,
         kosmosId: String,
@@ -60,39 +60,26 @@ const props = defineProps(
     }
 );
 
-const emit = defineEmits(['play', 'pause', 'playAt']);
+const emit = defineEmits(['togglePlay']);
 
 const url = computed(() => {
-  if (!props.track.value) return '';
+  if (!props.track) return '';
   
-  return props.track.value.isSfx ?
-      `https://www.epidemicsound.com/sound-effects/tracks/${props.track.value.kosmosId}` :
-      `https://www.epidemicsound.com/track/${props.track.value.publicSlug}`;
+  return props.track.isSfx ?
+      `https://www.epidemicsound.com/sound-effects/tracks/${props.track.kosmosId}` :
+      `https://www.epidemicsound.com/track/${props.track.publicSlug}`;
 })
-
-const play = () => {
-  if (props.playing) {
-    emit('pause');
-  } else {
-    emit('play');
-  }
-};
 
 const moods = computed(() =>
     props.track.moods.map(mood => mood.displayTag).join(', ')
 );
-
-const handleWaveformClick = (e) => {
-  const at = e.offsetX / e.target.offsetWidth;
-  emit('playAt', at);
-}
 </script>
 
 <template>
   <div class="bg-gradient bg-gradient-hover h-14 w-auto flex flex-row fade-in lg:gap-2 group overflow-hidden">
     <div class="flex gap-2 items-center h-14 overflow-hidden">
       <div class="inline size-14 cursor-pointer">
-        <div class="audio-control hidden group-hover:block" @click="play">
+        <div class="audio-control hidden group-hover:block" @click="emit('togglePlay')">
           <svg v-if="!playing" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                stroke="currentColor" class="size-6">
             <path stroke-linecap="round" stroke-linejoin="round"
@@ -117,7 +104,7 @@ const handleWaveformClick = (e) => {
     </div>
 
     <div class="content-center h-14 relative cursor-pointer flex-grow hidden min-[900px]:flex" @click="handleWaveformClick">
-      <span v-if="playProgress !== null" class="h-full absolute z-10 w-px bg-white top-0 left-0 smooth-move" :style="`left: ${playProgress * 100}%;`"></span>
+      <span v-if="progress !== null && isSelectedTrack" class="h-full absolute z-10 w-px bg-white top-0 left-0 smooth-move" :style="`left: ${progress * 100}%;`"></span>
       <Waveform :waveform-url="track.stems.full.waveformUrl"/>
     </div>
 

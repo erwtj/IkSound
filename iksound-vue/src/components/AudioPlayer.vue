@@ -1,64 +1,130 @@
 ﻿<script setup>
-import {onBeforeUnmount, onMounted, onUnmounted, ref, watch} from "vue";
+import {onBeforeUnmount, ref, watch} from "vue";
 
 const props = defineProps({
   audioUrl: String,
-  playing: Boolean
 });
 
-const audio = ref();
-const progress = ref(0);
 let animationFrameId;
+let pendingSeekRatio = null;
 
-const play = () => {
-  audio.value.play();
-  updateProgress();
-};
+const playing = ref(false);
+const progress = ref(null);
+const audio = ref();
 
-const updateProgress = () => {
-  if (!audio.value || audio.value.paused) return;
-  
-  progress.value = audio.value.currentTime / audio.value.duration || 0;
-  animationFrameId = requestAnimationFrame(updateProgress);
-};
+function play() {
+  if (!audio.value) return;
 
-const stopProgress = () => {
-  props.playing = false;
-  cancelAnimationFrame(animationFrameId);
-};
+  audio.value.play().catch(() => {});
+}
 
-onMounted(() => {
-  audio.value.addEventListener('play', updateProgress);
-  audio.value.addEventListener('pause', stopProgress);
-  audio.value.addEventListener('ended', stopProgress);
-  
-  if (props.playing) {
+function pause() {
+  if (!audio.value) return;
+
+  audio.value.pause();
+}
+
+function togglePlay() {
+  if (!audio.value) return;
+
+  if (audio.value.paused) {
     play();
+  } else {
+    pause();
   }
+}
+
+function handleWaveformClick(e) {
+  if (!audio.value) return;
+
+  const target = e.currentTarget || e.target;
+  const rect = target.getBoundingClientRect();
+  const at = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+
+  progress.value = at;
+
+  if (!isNaN(audio.value.duration) && audio.value.duration > 0) {
+    audio.value.currentTime = at * audio.value.duration;
+  } else {
+    pendingSeekRatio = at;
+  }
+
+  play();
+}
+
+function updateProgress() {
+  if (!audio.value || audio.value.paused) return;
+
+  if (!isNaN(audio.value.duration))
+    progress.value = audio.value.currentTime / audio.value.duration || 0;
+
+  animationFrameId = requestAnimationFrame(updateProgress);
+}
+
+function stopProgress() {
+  cancelAnimationFrame(animationFrameId);
+}
+
+function onPlay() {
+  playing.value = true;
+  updateProgress();
+}
+
+function onPause() {
+  playing.value = false;
+  stopProgress();
+}
+
+function onLoadedMetadata() {
+  if (pendingSeekRatio === null || !audio.value || !audio.value.duration) return;
+
+  audio.value.currentTime = pendingSeekRatio * audio.value.duration;
+  pendingSeekRatio = null;
+}
+
+function onEnded() {
+  playing.value = false;
+  progress.value = 0;
+  stopProgress();
+}
+
+defineExpose({
+  playing,
+  progress,
+  togglePlay,
+  pause,
+  handleWaveformClick,
 });
+
+watch(() => props.audioUrl, (newVal) => {
+  stopProgress();
+  progress.value = 0;
+  pendingSeekRatio = null;
+
+  if (!newVal || !audio.value) {
+    playing.value = false;
+    return;
+  }
+
+  play();
+}, {flush: 'post'});
 
 onBeforeUnmount(() => {
   stopProgress();
-  audio.value.removeEventListener('play', updateProgress);
-  audio.value.removeEventListener('pause', stopProgress);
-  audio.value.removeEventListener('ended', stopProgress);
-});
-
-watch(() => props.playing, (newVal) => {
-  if (newVal) {
-    play();
-  } else {
-    audio.value.pause();
-  }
 });
 </script>
 
 <template>
-  <div class="w-full relative">
-    <span class="h-full absolute z-10 w-px bg-white top-0 left-0 smooth-move" :style="`left: ${progress * 100}%;`"></span>
-  </div>
-    
-  <audio :src="audioUrl" type="audio/mpeg" preload="none" ref="audio"/>
+  <audio
+      :src="audioUrl"
+      type="audio/mpeg"
+      preload="none"
+      ref="audio"
+      @ended="onEnded"
+      @play="onPlay"
+      @pause="onPause"
+      @loadedmetadata="onLoadedMetadata"
+  />
 </template>
 
 <style scoped>
